@@ -503,7 +503,11 @@ pub fn handle_repository_status(globals: LoreGlobalArgs, args: &RepositoryStatus
                     data.revision
                 );
                 if data.remote_available != 0 {
-                    if data.remote_branch_exist != 0 {
+                    if data.remote_authorized == 0 {
+                        println!(
+                            "Remote reachable but could not read remote revision (not authorized or unavailable)"
+                        );
+                    } else if data.remote_branch_exist != 0 {
                         println!(
                             "Remote revision {} -> {}",
                             data.revision_remote_number, data.revision_remote

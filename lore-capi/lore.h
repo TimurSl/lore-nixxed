@@ -1090,21 +1090,39 @@ typedef struct lore_repository_state_dump_node_event_data_t {
 } lore_repository_state_dump_node_event_data_t;
 
 typedef struct lore_repository_status_revision_event_data_t {
+  // Repository identifier
   lore_repository_id_t repository;
+  // Current branch identifier
   lore_branch_id_t branch;
+  // Current branch name
   struct lore_string_t branch_name;
+  // Current revision identifier
   struct lore_hash_t revision;
+  // Current revision number
   uint64_t revision_number;
+  // Staged revision identifier (zero when nothing is staged)
   struct lore_hash_t revision_staged;
+  // Incoming revision identifier of a pending merge (zero when none)
   struct lore_hash_t revision_merged;
+  // Last revision merged in from the parent branch (calculated and reported if sync point option is set).
   struct lore_hash_t revision_merged_parent_branch;
+  // Local branch latest revision identifier
   struct lore_hash_t revision_local;
+  // Local branch latest revision number
   uint64_t revision_local_number;
+  // Remote branch latest revision identifier (zero if unknown, branch not existing on remote or remote not available)
   struct lore_hash_t revision_remote;
+  // Remote branch latest revision number (zero if corresponding identifier is zero)
   uint64_t revision_remote_number;
+  // Local holds revisions not on the remote history line
   uint8_t is_local_ahead;
+  // Remote holds revisions not present locally
   uint8_t is_remote_ahead;
+  // Remote configured and reachable with a local identity; connectivity only, not authorization
   uint8_t remote_available;
+  // Remote revision query returned an authoritative answer, identity is authorized to access the repository
+  uint8_t remote_authorized;
+  // Branch exists on the remote and the query returned a latest revisoin (possibly zero if branch does not exist on remote)
   uint8_t remote_branch_exist;
 } lore_repository_status_revision_event_data_t;
 

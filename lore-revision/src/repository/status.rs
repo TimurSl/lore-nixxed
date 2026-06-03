@@ -48,21 +48,39 @@ use crate::util::serde::u8_as_bool;
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct LoreRepositoryStatusRevisionEventData {
+    /// Repository identifier
     pub repository: RepositoryId,
+    /// Current branch identifier
     pub branch: BranchId,
+    /// Current branch name
     pub branch_name: LoreString,
+    /// Current revision identifier
     pub revision: Hash,
+    /// Current revision number
     pub revision_number: u64,
+    /// Staged revision identifier (zero when nothing is staged)
     pub revision_staged: Hash,
+    /// Incoming revision identifier of a pending merge (zero when none)
     pub revision_merged: Hash,
+    /// Last revision merged in from the parent branch (calculated and reported if sync point option is set).
     pub revision_merged_parent_branch: Hash,
+    /// Local branch latest revision identifier
     pub revision_local: Hash,
+    /// Local branch latest revision number
     pub revision_local_number: u64,
+    /// Remote branch latest revision identifier (zero if unknown, branch not existing on remote or remote not available)
     pub revision_remote: Hash,
+    /// Remote branch latest revision number (zero if corresponding identifier is zero)
     pub revision_remote_number: u64,
+    /// Local holds revisions not on the remote history line
     pub is_local_ahead: u8,
+    /// Remote holds revisions not present locally
     pub is_remote_ahead: u8,
+    /// Remote configured and reachable with a local identity; connectivity only, not authorization
     pub remote_available: u8,
+    /// Remote revision query returned an authoritative answer, identity is authorized to access the repository
+    pub remote_authorized: u8,
+    /// Branch exists on the remote and the query returned a latest revisoin (possibly zero if branch does not exist on remote)
     pub remote_branch_exist: u8,
 }
 
@@ -85,6 +103,7 @@ impl LoreRepositoryStatusRevisionEventData {
         is_local_ahead: bool,
         is_remote_ahead: bool,
         remote_available: bool,
+        remote_authorized: bool,
         remote_branch_exist: bool,
     ) -> Self {
         LoreRepositoryStatusRevisionEventData {
@@ -103,6 +122,7 @@ impl LoreRepositoryStatusRevisionEventData {
             is_local_ahead: is_local_ahead.into(),
             is_remote_ahead: is_remote_ahead.into(),
             remote_available: remote_available.into(),
+            remote_authorized: remote_authorized.into(),
             remote_branch_exist: remote_branch_exist.into(),
         }
     }
@@ -563,12 +583,15 @@ pub async fn status(
         .await
         .forward::<StatusError>("deserializing local state")?;
 
-    let remote_latest = if let Ok(remote) = repository.remote().await {
-        branch::load_remote_latest(remote.clone(), repository.id, branch.id)
-            .await
-            .ok()
-    } else {
-        None
+    // Authorized only on an authoritative answer — a latest revision
+    // or branch not found; proving the identity is authorized and has access
+    let (remote_latest, remote_authorized) = match repository.remote().await {
+        Ok(remote) => match branch::load_remote(remote, repository.id, branch.id).await {
+            Ok(status) => (Some(status.latest), true),
+            Err(err) if err.is_branch_not_found() => (None, true),
+            Err(_) => (None, false),
+        },
+        Err(_) => (None, false),
     };
 
     let remote_state = if let Some(remote_latest) = remote_latest {
@@ -736,6 +759,7 @@ pub async fn status(
             local_ahead,
             remote_ahead,
             repository.remote().await.is_ok(),
+            remote_authorized,
             remote_latest.is_some(),
         );
         lore_debug!("Repository status: {data:?}");
