@@ -16,6 +16,7 @@ use tonic::Response;
 use tonic::Status;
 use tracing::debug;
 
+use crate::grpc::FilterSlowDownExt;
 use crate::grpc::extract_correlation_id;
 use crate::grpc::get_repository;
 use crate::grpc::get_user_id;
@@ -46,6 +47,7 @@ pub async fn handler(
         .scope(execution, async move {
             let state = State::deserialize(repository.clone(), revision_id)
                 .await
+                .filter_slow_down()?
                 .map_err(|_err| Status::invalid_argument("Invalid revision state"))?;
 
             let metadata = Metadata::deserialize(repository.clone(), state.metadata_hash())
@@ -55,6 +57,7 @@ pub async fn handler(
             let parent_self_revision_number = if !state.parent_self().is_zero() {
                 let parent_state = State::deserialize(repository.clone(), state.parent_self())
                     .await
+                    .filter_slow_down()?
                     .map_err(|_err| Status::invalid_argument("Invalid parent revision state"))?;
                 Some(parent_state.revision_number())
             } else {
@@ -64,6 +67,7 @@ pub async fn handler(
             let parent_other_revision_number = if !state.parent_other().is_zero() {
                 let parent_state = State::deserialize(repository.clone(), state.parent_other())
                     .await
+                    .filter_slow_down()?
                     .map_err(|_err| {
                         Status::invalid_argument("Invalid parent other revision state")
                     })?;

@@ -40,6 +40,7 @@ use tracing::warn;
 use zerocopy::IntoBytes;
 
 use crate::cache;
+use crate::grpc::FilterSlowDownExt;
 use crate::grpc::ServerResultExt;
 use crate::grpc::extract_correlation_id;
 use crate::grpc::get_repository;
@@ -517,6 +518,7 @@ async fn walk_revisions(
     while items.len() < MAX_REVISION_LIST_RESPONSE_ITEMS && !current.is_zero() {
         let state = state::State::deserialize(repository.clone(), current)
             .await
+            .filter_slow_down()?
             .map_err(|err| {
                 if first {
                     if err.is_not_found() {

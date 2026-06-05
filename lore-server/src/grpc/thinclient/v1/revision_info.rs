@@ -23,6 +23,7 @@ use tracing::debug;
 use tracing::warn;
 
 use super::helpers::resolve_signature;
+use crate::grpc::FilterSlowDownExt;
 use crate::grpc::extract_correlation_id;
 use crate::grpc::get_repository;
 use crate::grpc::get_user_id;
@@ -80,6 +81,7 @@ async fn load_revision(
 ) -> Result<thin_client_v1::Revision, Status> {
     let state = State::deserialize(repository.clone(), signature)
         .await
+        .filter_slow_down()?
         .map_err(|err| {
             if err.is_not_found() {
                 Status::not_found(format!("Revision {signature} not found"))
@@ -232,6 +234,7 @@ async fn load_optional_parent(
     }
     let state = State::deserialize(repository.clone(), signature)
         .await
+        .filter_slow_down()?
         .map_err(|err| {
             warn!(
                 {REPOSITORY_ID} = %repository.id, {REVISION} = %signature, ?err,

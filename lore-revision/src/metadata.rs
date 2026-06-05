@@ -134,6 +134,13 @@ pub enum MetadataError {
     AddressNotFound,
     PayloadNotFound,
     Disconnected,
+    SlowDown,
+    Maintenance,
+    NoRemote,
+    NotAuthenticated,
+    NotAuthorized,
+    NotConnected,
+    NotSupported,
 }
 
 #[derive(Debug)]
@@ -237,7 +244,7 @@ impl Metadata {
             options,
         )
         .await
-        .internal("reading metadata")?;
+        .forward::<MetadataError>("reading metadata")?;
 
         let metadata = Metadata::new_with_buffer(BytesMut::from(buffer));
         metadata.check_header()?;
@@ -284,7 +291,7 @@ impl Metadata {
             tracker,
         )
         .await
-        .internal("writing metadata")?;
+        .forward::<MetadataError>("writing metadata")?;
 
         Ok(address.hash)
     }
@@ -318,7 +325,7 @@ impl Metadata {
                 .no_remote_write(),
         )
         .await
-        .internal("writing metadata (local)")?;
+        .forward::<MetadataError>("writing metadata (local)")?;
 
         Ok(address.hash)
     }

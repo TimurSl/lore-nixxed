@@ -12,6 +12,7 @@ use bytes::BytesMut;
 use lore_error_set::prelude::*;
 use lore_transport::StorageSession;
 
+use crate::STORE_RETRY_ATTEMPTS;
 use crate::compress;
 use crate::concurrency::file_count_limit_acquire;
 use crate::defragment::DefragmentSink;
@@ -31,8 +32,14 @@ use crate::types::Fragment;
 use crate::types::Partition;
 
 fn store_retry() -> crate::Retry {
-    // Retry, start at 50 milliseconds, maximum wait 10 seconds, try 60 times
-    crate::retry(50, 10_000, 60)
+    // Retry, start at 50 milliseconds, maximum wait 10 seconds
+    crate::retry(
+        50,
+        10_000,
+        *STORE_RETRY_ATTEMPTS.get_or_init(|| {
+            60 //default try 60 times
+        }),
+    )
 }
 
 /// Load a single raw fragment from store with retry backoff

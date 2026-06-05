@@ -18,6 +18,7 @@ use tracing::debug;
 use tracing::warn;
 
 use super::path_diff::map_to_path_diff;
+use crate::grpc::FilterSlowDownExt;
 use crate::grpc::extract_correlation_id;
 use crate::grpc::get_repository;
 use crate::grpc::get_user_id;
@@ -52,9 +53,11 @@ pub async fn handler(
         .scope(execution, async move {
             let state_source = State::deserialize(repository.clone(), revision_from)
                 .await
+                .filter_slow_down()?
                 .map_err(|_err| Status::invalid_argument("Invalid from state"))?;
             let state_target = State::deserialize(repository.clone(), revision_to)
                 .await
+                .filter_slow_down()?
                 .map_err(|_err| Status::invalid_argument("Invalid to state"))?;
 
             let result = collect_stream(|tx| {

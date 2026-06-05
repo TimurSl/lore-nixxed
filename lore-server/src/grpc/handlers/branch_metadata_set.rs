@@ -18,6 +18,7 @@ use tonic::Request;
 use tonic::Response;
 use tonic::Status;
 
+use crate::grpc::FilterSlowDownExt;
 use crate::grpc::extract_correlation_id;
 use crate::grpc::get_repository;
 use crate::grpc::get_user_id;
@@ -124,6 +125,7 @@ pub async fn handler(
             let current_metadata = if !expected_hash.is_zero() {
                 Metadata::deserialize(repository.clone(), expected_hash)
                     .await
+                    .filter_slow_down()?
                     .map_err(|err| {
                         warn_error_to_status(&err, |err| {
                             Status::invalid_argument(format!(

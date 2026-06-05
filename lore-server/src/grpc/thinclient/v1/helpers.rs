@@ -29,6 +29,7 @@ use tonic::Status;
 use tracing::debug;
 use tracing::warn;
 
+use crate::grpc::FilterSlowDownExt;
 use crate::grpc::warn_error_to_status;
 
 /// Normalised form of the per-RPC `oneof` (identifier | signature) used
@@ -162,6 +163,7 @@ pub(super) async fn identifier_for_signature(
 ) -> Result<model_v1::RevisionIdentifier, Status> {
     let state = State::deserialize(repository.clone(), signature)
         .await
+        .filter_slow_down()?
         .map_err(|err| {
             if err.is_not_found() {
                 Status::not_found(format!("Revision {signature} not found"))

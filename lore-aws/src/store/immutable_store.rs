@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 
 use async_trait::async_trait;
+use aws_sdk_dynamodb::error::SdkError;
 use aws_sdk_dynamodb::operation::put_item::PutItemError;
 use aws_sdk_dynamodb::primitives::Blob;
 use aws_sdk_dynamodb::types::AttributeValue;
@@ -1010,8 +1011,14 @@ impl AwsImmutableStore {
             )
             .await
             .map_err(|e| {
-                warn!("Failed to get fragment metadata for hash: {hash}, {e:?}");
-                StoreError::from(AddressNotFound::from(Address::zero_context_hash(hash)))
+                warn!(%hash, ?e, "Failed to get fragment metadata for hash");
+                if let AwsError::AwsSdkError(sdk_error) = e
+                    && let SdkError::TimeoutError(_) = sdk_error
+                {
+                    StoreError::from(SlowDown)
+                } else {
+                    StoreError::from(AddressNotFound::from(Address::zero_context_hash(hash)))
+                }
             })?
             .item
         {
@@ -1552,6 +1559,7 @@ mod test {
 
     use aws_sdk_dynamodb::operation::delete_item::DeleteItemError;
     use aws_sdk_dynamodb::operation::delete_item::DeleteItemOutput;
+    use aws_sdk_dynamodb::operation::get_item::GetItemError;
     use aws_sdk_dynamodb::operation::get_item::GetItemOutput;
     use aws_sdk_dynamodb::operation::put_item::PutItemOutput;
     use aws_sdk_dynamodb::operation::query::QueryError;
@@ -1559,6 +1567,7 @@ mod test {
     use aws_sdk_dynamodb::types::AttributeValue;
     use aws_sdk_dynamodb::types::error::ConditionalCheckFailedException;
     use aws_sdk_dynamodb::types::error::ProvisionedThroughputExceededException;
+    use aws_sdk_dynamodb::types::error::ResourceNotFoundException;
     use aws_sdk_s3::error::ErrorMetadata;
     use aws_sdk_s3::operation::delete_object::DeleteObjectError;
     use aws_sdk_s3::operation::delete_object::DeleteObjectOutput;
@@ -1571,6 +1580,7 @@ mod test {
     use aws_smithy_runtime_api::client::orchestrator::HttpResponse;
     use aws_smithy_runtime_api::client::result::SdkError;
     use aws_smithy_runtime_api::client::result::ServiceError;
+    use aws_smithy_runtime_api::client::result::TimeoutError;
     use lore_base::runtime::LORE_CONTEXT;
     use lore_base::types::FragmentFlags;
     use lore_revision::fragment;
@@ -3123,6 +3133,85 @@ mod test {
         // mocks.
         assert_eq!(stats.num_fragments.load(Ordering::Relaxed), 0);
         assert_eq!(stats.num_payloads.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn test_load_metadata_sdk_timeout_returns_slow_down() {
+        let (_fragment, address, _payload) = fragment::generate_random();
+
+        let s3mock = MockS3Impl::default();
+        let mut dynamodb_mock = MockDynamoDb::default();
+
+        let metadata_entry = FragmentMetadataEntry::new(address.hash);
+        let av_map: HashMap<String, AttributeValue> =
+            serde_dynamo::to_item(metadata_entry).unwrap();
+
+        #[derive(Debug, thiserror::Error)]
+        #[error("stub")]
+        struct StubError;
+
+        dynamodb_mock
+            .expect_get_item()
+            .with(
+                eq(Arc::<str>::from(METADATA_TABLE_NAME)),
+                eq(av_map),
+                eq(true),
+            )
+            .return_once(move |_, _, _| {
+                Err(AwsError::AwsSdkError(SdkError::TimeoutError(
+                    TimeoutError::builder().source(Box::new(StubError)).build(),
+                )))
+            });
+
+        let store = initialize_immutable_store(s3mock, dynamodb_mock).await;
+
+        assert!(
+            store
+                .load_metadata(address.hash)
+                .await
+                .unwrap_err()
+                .is_slow_down()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_load_metadata_sdk_service_error_returns_address_not_found() {
+        let (_fragment, address, _payload) = fragment::generate_random();
+
+        let s3mock = MockS3Impl::default();
+        let mut dynamodb_mock = MockDynamoDb::default();
+
+        let metadata_entry = FragmentMetadataEntry::new(address.hash);
+        let av_map: HashMap<String, AttributeValue> =
+            serde_dynamo::to_item(metadata_entry).unwrap();
+
+        dynamodb_mock
+            .expect_get_item()
+            .with(
+                eq(Arc::<str>::from(METADATA_TABLE_NAME)),
+                eq(av_map),
+                eq(true),
+            )
+            .return_once(move |_, _, _| {
+                Err(aws_error(
+                    GetItemError::ResourceNotFoundException(
+                        ResourceNotFoundException::builder()
+                            .message("Table not found")
+                            .build(),
+                    ),
+                    400u16,
+                ))
+            });
+
+        let store = initialize_immutable_store(s3mock, dynamodb_mock).await;
+
+        assert!(
+            store
+                .load_metadata(address.hash)
+                .await
+                .unwrap_err()
+                .is_address_not_found()
+        );
     }
 
     #[tokio::test]

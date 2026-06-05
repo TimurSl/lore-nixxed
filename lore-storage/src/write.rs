@@ -14,6 +14,7 @@ use tokio::sync::OwnedSemaphorePermit;
 use tokio_util::sync::CancellationToken;
 use zerocopy::FromZeros;
 
+use crate::STORE_RETRY_ATTEMPTS;
 use crate::compress::COMPRESSION_MODE;
 use crate::concurrency::file_count_limit_acquire;
 use crate::error::StorageError;
@@ -38,7 +39,13 @@ use crate::types::Partition;
 use crate::write_tracker::WriteTracker;
 
 fn store_retry() -> crate::Retry {
-    crate::retry(50, 10_000, 60)
+    crate::retry(
+        50,
+        10_000,
+        *STORE_RETRY_ATTEMPTS.get_or_init(|| {
+            60 //default try 60 times
+        }),
+    )
 }
 
 /// Write a single raw fragment to the local store with retry backoff.

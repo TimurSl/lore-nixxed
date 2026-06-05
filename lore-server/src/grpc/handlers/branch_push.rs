@@ -40,6 +40,7 @@ use tracing::span;
 use tracing::warn;
 
 use crate::cache;
+use crate::grpc::FilterSlowDownExt;
 use crate::grpc::ServerResultExt;
 use crate::grpc::extract_correlation_id;
 use crate::grpc::get_authorization;
@@ -325,6 +326,7 @@ pub async fn push(
     // Verify the validity of the revision to push to latest
     let state = State::deserialize(repository.clone(), latest)
         .await
+        .filter_slow_down()?
         .warn_map_err(|err| {
             Status::internal(format!("failed to load current latest state: {err}"))
         })?;
@@ -373,6 +375,7 @@ pub async fn push(
 
         let state_parent = State::deserialize(repository.clone(), state.parent_self())
             .await
+            .filter_slow_down()?
             .warn_map_err(|err| {
                 Status::internal(format!("Failed to load incoming state: {err}"))
             })?;
@@ -382,6 +385,7 @@ pub async fn push(
         if !state.parent_other().is_zero() {
             let state_parent = State::deserialize(repository.clone(), state.parent_other())
                 .await
+                .filter_slow_down()?
                 .warn_map_err(|err| {
                     Status::internal(format!("Failed to load other parent state: {err}"))
                 })?;
@@ -479,6 +483,7 @@ async fn try_fast_forward_merge(
     // client could reference fragments that were never fully uploaded.
     let base_state = State::deserialize(repository.clone(), original_base)
         .await
+        .filter_slow_down()?
         .warn_map_err(|err| {
             Status::internal(format!(
                 "Failed to load base state for fragment verification: {err}"
@@ -529,6 +534,7 @@ async fn try_fast_forward_merge(
         // Deserialize the current head state to use as base for the new merge revision
         let state_current = State::deserialize(repository.clone(), current_head)
             .await
+            .filter_slow_down()?
             .warn_map_err(|err| {
                 Status::internal(format!(
                     "Failed to deserialize current head for fast-forward merge: {err}"
@@ -556,6 +562,7 @@ async fn try_fast_forward_merge(
         let state_current_number = {
             let parent_state = State::deserialize(repository.clone(), current_head)
                 .await
+                .filter_slow_down()?
                 .warn_map_err(|err| {
                     Status::internal(format!("Failed to load current head state: {err}"))
                 })?;

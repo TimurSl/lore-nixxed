@@ -477,6 +477,9 @@ fn state_status(
     signature: Hash,
     err: lore_revision::state::StateError,
 ) -> Status {
+    if err.is_slow_down() {
+        return Status::resource_exhausted(err.to_string());
+    }
     if err.is_not_found() {
         Status::not_found(format!("Revision {signature} not found"))
     } else {

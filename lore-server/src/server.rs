@@ -39,6 +39,7 @@ use lore_revision::store::remote::RemoteMutableStore;
 use lore_storage::CompressionMode;
 use lore_storage::ImmutableStore;
 use lore_storage::MutableStore;
+use lore_storage::assume_server_policies;
 use lore_storage::compress::COMPRESSION_MODE;
 use lore_storage::hash::StringHash;
 use lore_storage::local::immutable_store::ImmutableStoreCreateOptions;
@@ -166,6 +167,7 @@ pub struct Cli {
 /// ```
 pub fn server_main(config: ServerConfig) -> Result<()> {
     set_user_agent(format!("lore-server/{}", LORE_LIBRARY_VERSION.as_str()));
+    assume_server_policies();
 
     let cli = Cli::parse();
     let (settings, settings_hash) = Settings::load(cli.config.as_deref(), cli.env.as_deref())?;

@@ -26,8 +26,10 @@ pub mod tower;
 pub use admin_service::LoreAdminService;
 use lore_base::types::Context;
 use lore_revision::lore::RepositoryId;
+use lore_revision::metadata::MetadataError;
 use lore_revision::repository::RepositoryWriteToken;
 use lore_revision::repository::ServerContext;
+use lore_revision::state::StateError;
 use lore_transport::grpc::CORRELATION_ID_HEADER;
 use lore_transport::grpc::PARTITION_ID_KEY;
 use lore_transport::grpc::REPOSITORY_ID_KEY;
@@ -355,6 +357,32 @@ pub fn timeout_grpc<T>(
     timeout(duration, fut).map(|result| {
         result.unwrap_or_else(|_| Err(Status::cancelled("Request handler timeout exceeded")))
     })
+}
+
+pub trait FilterSlowDownExt<T, E> {
+    fn filter_slow_down(self) -> Result<Result<T, E>, Status>;
+}
+
+impl<T> FilterSlowDownExt<T, StateError> for Result<T, StateError> {
+    fn filter_slow_down(self) -> Result<Result<T, StateError>, Status> {
+        if let Err(err) = &self
+            && err.is_slow_down()
+        {
+            return Err(Status::resource_exhausted(err.to_string()));
+        }
+        Ok(self)
+    }
+}
+
+impl<T> FilterSlowDownExt<T, MetadataError> for Result<T, MetadataError> {
+    fn filter_slow_down(self) -> Result<Result<T, MetadataError>, Status> {
+        if let Err(err) = &self
+            && err.is_slow_down()
+        {
+            return Err(Status::resource_exhausted(err.to_string()));
+        }
+        Ok(self)
+    }
 }
 
 #[cfg(test)]
@@ -688,6 +716,56 @@ mod tests {
             let status = result.unwrap_err();
             assert_eq!(status.code(), Code::Cancelled);
             assert!(status.message().contains("timeout"));
+        }
+    }
+
+    mod filter_slow_down_tests {
+        use lore_base::error::SlowDown;
+
+        use super::*;
+
+        #[test]
+        fn state_ok_passes_through() {
+            let result: Result<i32, StateError> = Ok(42);
+            let filtered = result.filter_slow_down().unwrap();
+            assert_eq!(filtered.unwrap(), 42);
+        }
+
+        #[test]
+        fn state_slow_down_returns_resource_exhausted() {
+            let result: Result<i32, StateError> = Err(StateError::from(SlowDown));
+            let status = result.filter_slow_down().unwrap_err();
+            assert_eq!(status.code(), Code::ResourceExhausted);
+        }
+
+        #[test]
+        fn state_error_passes_through() {
+            let result: Result<i32, StateError> = Err(StateError::internal("other error"));
+            let filtered = result.filter_slow_down().unwrap();
+            let underlying_error = filtered.expect_err("Should be err");
+            assert!(!underlying_error.is_slow_down());
+        }
+
+        #[test]
+        fn metadata_ok_passes_through() {
+            let result: Result<i32, MetadataError> = Ok(42);
+            let filtered = result.filter_slow_down().unwrap();
+            assert_eq!(filtered.unwrap(), 42);
+        }
+
+        #[test]
+        fn metadata_slow_down_returns_resource_exhausted() {
+            let result: Result<i32, MetadataError> = Err(MetadataError::from(SlowDown));
+            let status = result.filter_slow_down().unwrap_err();
+            assert_eq!(status.code(), Code::ResourceExhausted);
+        }
+
+        #[test]
+        fn metadata_error_passes_through() {
+            let result: Result<i32, MetadataError> = Err(MetadataError::internal("other error"));
+            let filtered = result.filter_slow_down().unwrap();
+            let underlying_error = filtered.expect_err("Should be err");
+            assert!(!underlying_error.is_slow_down());
         }
     }
 }

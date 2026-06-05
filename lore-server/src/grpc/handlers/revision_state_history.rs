@@ -16,6 +16,7 @@ use tracing::info;
 use tracing::trace;
 use tracing::warn;
 
+use crate::grpc::FilterSlowDownExt;
 use crate::grpc::extract_correlation_id;
 use crate::grpc::get_repository;
 use crate::grpc::get_user_id;
@@ -67,7 +68,10 @@ pub async fn handler(
                 }
 
                 let state = {
-                    match state::State::deserialize(repository.clone(), revision).await {
+                    match state::State::deserialize(repository.clone(), revision)
+                        .await
+                        .filter_slow_down()?
+                    {
                         Ok(state) => state,
                         Err(ref e) if e.is_not_found() => {
                             if base_revision {

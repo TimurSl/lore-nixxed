@@ -37,6 +37,7 @@ use tonic::metadata::MetadataValue;
 use tracing::debug;
 use tracing::warn;
 
+use crate::grpc::FilterSlowDownExt;
 use crate::grpc::extract_correlation_id;
 use crate::grpc::get_repository;
 use crate::grpc::get_user_id;
@@ -255,7 +256,10 @@ async fn walk_revisions(
 
     while items.len() < MAX_REVISION_LIST_RESPONSE_ITEMS {
         let state = {
-            match state::State::deserialize(repository.clone(), revision).await {
+            match state::State::deserialize(repository.clone(), revision)
+                .await
+                .filter_slow_down()?
+            {
                 Ok(state) => state,
                 Err(ref err) if err.is_not_found() => {
                     if base_revision {

@@ -45,6 +45,7 @@ use crate::filter::FilterMode;
 use crate::fragment::FragmentFlags;
 use crate::hash;
 use crate::immutable;
+use crate::immutable::ImmutableError;
 use crate::immutable::ReadBoxFromImmutable;
 use crate::immutable::ReadFromImmutable;
 use crate::immutable::WriteToImmutable;
@@ -557,6 +558,7 @@ impl State {
             Err(ref e) if e.is_address_not_found() || e.is_payload_not_found() => {
                 return Err(NotFound.into());
             }
+            Err(ImmutableError::SlowDown(traced)) => return Err(StateError::SlowDown(traced)),
             Err(_err) => return Err(StateError::internal("Failed to read state data")),
         };
 

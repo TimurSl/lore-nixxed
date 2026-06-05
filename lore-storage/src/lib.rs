@@ -8,6 +8,9 @@ pub mod errors;
 pub mod fragment_engine;
 pub mod fragment_flags;
 pub mod fs_util;
+
+use std::sync::OnceLock;
+
 pub use lore_base::allocator::GrowVec;
 pub use lore_base::allocator::GrowVecMemoryStats;
 pub mod hash;
@@ -93,6 +96,8 @@ pub use local::immutable_store::LocalImmutableStoreError;
 pub use local::mutable_store::LocalMutableStore;
 pub use local::mutable_store::LocalMutableStoreError;
 pub use local::mutable_store::MutableStoreSettings;
+use lore_base::lore_info;
+use lore_base::lore_warn;
 // Re-export maintenance functions
 pub use maintenance::compactor;
 pub use maintenance::evictor;
@@ -197,4 +202,17 @@ pub fn retry(start: u64, maximum: u64, limit: usize) -> Retry {
         counter: 0,
         limit,
     }
+}
+
+/// Store interactions use a retry policy to retry failures.
+/// Server and Clients have different needs/expectations around retries
+/// and this var lets each customize the behavior
+pub static STORE_RETRY_ATTEMPTS: OnceLock<usize> = OnceLock::new();
+
+/// In a server side context - assume store behaviors that make sense for this environment
+pub fn assume_server_policies() {
+    lore_info!("Assume server store policies");
+    let _ = STORE_RETRY_ATTEMPTS
+        .set(7)
+        .inspect_err(|_e| lore_warn!("Could not set store retry attempts"));
 }
