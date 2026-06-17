@@ -7,7 +7,7 @@ plugin-enabled Lore Server.
 
 ```nix
 {
-  inputs.lore.url = "github:your-org/lore";
+  inputs.lore.url = "github:TimurSl/lore-nixxed";
 
   outputs = { self, nixpkgs, lore, ... }: {
     nixosConfigurations.host = nixpkgs.lib.nixosSystem {
