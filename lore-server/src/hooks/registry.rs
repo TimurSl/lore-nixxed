@@ -92,14 +92,10 @@ impl HookRegistry {
     /// # Arguments
     ///
     /// * `factory` - The hook factory to register
-    ///
-    /// # Panics
-    ///
-    /// Panics if a hook with the same name is already registered.
     pub fn register_hook(&mut self, factory: Box<dyn HookFactory>) {
         let name = factory.name();
         if self.factories.contains_key(name) {
-            panic!("Hook '{name}' is already registered");
+            return;
         }
         info!(hook_name = name, "Registered hook factory");
         self.factories.insert(name, factory);
@@ -423,11 +419,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "already registered")]
-    fn test_register_duplicate_hook_panics() {
+    fn test_register_duplicate_hook_is_idempotent() {
         let mut registry = HookRegistry::new();
         registry.register_hook(Box::new(MockHookFactory::new("test")));
         registry.register_hook(Box::new(MockHookFactory::new("test")));
+        assert_eq!(registry.list_hooks().len(), 1);
     }
 
     #[test]

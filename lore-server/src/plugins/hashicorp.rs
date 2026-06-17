@@ -118,7 +118,7 @@ impl TopologyPluginFactory for ConsulTopologyPluginFactory {
 /// is not tied to the topology factory.
 pub fn register(registry: &mut PluginRegistry) {
     registry.register_topology_plugin(Box::new(ConsulTopologyPluginFactory));
-    registry.register_resource_detector(|_runtime_handle| {
+    registry.register_resource_detector("nomad", |_runtime_handle| {
         Box::new(NomadResourceDetector) as Box<dyn ResourceDetector>
     });
 }

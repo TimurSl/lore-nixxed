@@ -56,7 +56,7 @@ pub struct PluginRegistry {
     lock_store_factories: HashMap<&'static str, Box<dyn LockStorePluginFactory>>,
     topology_factories: HashMap<&'static str, Box<dyn TopologyPluginFactory>>,
     notification_factories: HashMap<&'static str, Box<dyn NotificationPluginFactory>>,
-    resource_detector_factories: Vec<ResourceDetectorFactory>,
+    resource_detector_factories: HashMap<&'static str, ResourceDetectorFactory>,
 }
 
 impl PluginRegistry {
@@ -75,11 +75,15 @@ impl PluginRegistry {
     ///
     /// The factory receives a runtime handle for detectors that perform async
     /// work during detection (e.g. querying instance metadata).
-    pub fn register_resource_detector<F>(&mut self, factory: F)
+    pub fn register_resource_detector<F>(&mut self, name: &'static str, factory: F)
     where
         F: Fn(Handle) -> Box<dyn ResourceDetector> + Send + Sync + 'static,
     {
-        self.resource_detector_factories.push(Box::new(factory));
+        if self.resource_detector_factories.contains_key(name) {
+            return;
+        }
+        self.resource_detector_factories
+            .insert(name, Box::new(factory));
     }
 
     /// Builds the OpenTelemetry resource detectors registered by every
@@ -92,7 +96,7 @@ impl PluginRegistry {
     /// each factory for detectors that perform async work during detection.
     pub fn resource_detectors(&self, runtime_handle: Handle) -> Vec<Box<dyn ResourceDetector>> {
         self.resource_detector_factories
-            .iter()
+            .values()
             .map(|factory| factory(runtime_handle.clone()))
             .collect()
     }
@@ -101,16 +105,13 @@ impl PluginRegistry {
     ///
     /// # Arguments
     /// * `factory` - The plugin factory to register
-    ///
-    /// # Panics
-    /// Panics if a plugin with the same name is already registered.
     pub fn register_immutable_store_plugin(
         &mut self,
         factory: Box<dyn ImmutableStorePluginFactory>,
     ) {
         let name = factory.name();
         if self.immutable_store_factories.contains_key(name) {
-            panic!("Immutable store plugin '{name}' is already registered");
+            return;
         }
         info!(
             plugin_name = name,
@@ -226,13 +227,10 @@ impl PluginRegistry {
     ///
     /// # Arguments
     /// * `factory` - The plugin factory to register
-    ///
-    /// # Panics
-    /// Panics if a plugin with the same name is already registered.
     pub fn register_mutable_store_plugin(&mut self, factory: Box<dyn MutableStorePluginFactory>) {
         let name = factory.name();
         if self.mutable_store_factories.contains_key(name) {
-            panic!("Mutable store plugin '{name}' is already registered");
+            return;
         }
         info!(
             plugin_name = name,
@@ -349,13 +347,10 @@ impl PluginRegistry {
     ///
     /// # Arguments
     /// * `factory` - The plugin factory to register
-    ///
-    /// # Panics
-    /// Panics if a plugin with the same name is already registered.
     pub fn register_lock_store_plugin(&mut self, factory: Box<dyn LockStorePluginFactory>) {
         let name = factory.name();
         if self.lock_store_factories.contains_key(name) {
-            panic!("LockData store plugin '{name}' is already registered");
+            return;
         }
         info!(
             plugin_name = name,
@@ -471,13 +466,10 @@ impl PluginRegistry {
     ///
     /// # Arguments
     /// * `factory` - The plugin factory to register
-    ///
-    /// # Panics
-    /// Panics if a plugin with the same name is already registered.
     pub fn register_topology_plugin(&mut self, factory: Box<dyn TopologyPluginFactory>) {
         let name = factory.name();
         if self.topology_factories.contains_key(name) {
-            panic!("Topology plugin '{name}' is already registered");
+            return;
         }
         info!(
             plugin_name = name,
@@ -592,17 +584,10 @@ impl PluginRegistry {
     /// Registers a notification plugin factory.
     ///
     /// # Arguments
-    /// * `name` - Unique name for this notification plugin
     /// * `factory` - The plugin factory to register
-    ///
-    /// # Panics
-    /// Panics if a plugin with the same name is already registered.
     pub fn register_notification_plugin(&mut self, factory: Box<dyn NotificationPluginFactory>) {
         if self.notification_factories.contains_key(factory.name()) {
-            panic!(
-                "Notification plugin '{}' is already registered",
-                factory.name()
-            );
+            return;
         }
         info!(
             plugin_name = factory.name(),
@@ -1342,14 +1327,27 @@ mod tests {
     #[tokio::test]
     async fn test_register_resource_detector_collects_each_registered_detector() {
         let mut registry = PluginRegistry::new();
-        registry.register_resource_detector(|_handle| {
+        registry.register_resource_detector("d1", |_handle| {
             Box::new(MockResourceDetector) as Box<dyn ResourceDetector>
         });
-        registry.register_resource_detector(|_handle| {
+        registry.register_resource_detector("d2", |_handle| {
             Box::new(MockResourceDetector) as Box<dyn ResourceDetector>
         });
 
         assert_eq!(registry.resource_detectors(Handle::current()).len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_register_resource_detector_is_idempotent() {
+        let mut registry = PluginRegistry::new();
+        registry.register_resource_detector("d1", |_handle| {
+            Box::new(MockResourceDetector) as Box<dyn ResourceDetector>
+        });
+        registry.register_resource_detector("d1", |_handle| {
+            Box::new(MockResourceDetector) as Box<dyn ResourceDetector>
+        });
+
+        assert_eq!(registry.resource_detectors(Handle::current()).len(), 1);
     }
 
     #[tokio::test]
@@ -1391,11 +1389,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "already registered")]
-    fn test_register_duplicate_immutable_store_plugin_panics() {
+    fn test_register_duplicate_immutable_store_plugin_is_idempotent() {
         let mut registry = PluginRegistry::new();
         registry.register_immutable_store_plugin(Box::new(MockImmutableStoreFactory::new("test")));
         registry.register_immutable_store_plugin(Box::new(MockImmutableStoreFactory::new("test")));
+        assert_eq!(registry.list_immutable_store_plugins().len(), 1);
     }
 
     #[test]
@@ -1483,11 +1481,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "already registered")]
-    fn test_register_duplicate_mutable_store_plugin_panics() {
+    fn test_register_duplicate_mutable_store_plugin_is_idempotent() {
         let mut registry = PluginRegistry::new();
         registry.register_mutable_store_plugin(Box::new(MockMutableStoreFactory::new("test")));
         registry.register_mutable_store_plugin(Box::new(MockMutableStoreFactory::new("test")));
+        assert_eq!(registry.list_mutable_store_plugins().len(), 1);
     }
 
     #[test]
@@ -1576,11 +1574,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "already registered")]
-    fn test_register_duplicate_topology_plugin_panics() {
+    fn test_register_duplicate_topology_plugin_is_idempotent() {
         let mut registry = PluginRegistry::new();
         registry.register_topology_plugin(Box::new(MockTopologyFactory::new("test")));
         registry.register_topology_plugin(Box::new(MockTopologyFactory::new("test")));
+        assert_eq!(registry.list_topology_plugins().len(), 1);
     }
 
     #[test]
@@ -1712,11 +1710,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "already registered")]
-    fn test_register_duplicate_lock_store_plugin_panics() {
+    fn test_register_duplicate_lock_store_plugin_is_idempotent() {
         let mut registry = PluginRegistry::new();
         registry.register_lock_store_plugin(Box::new(MockLockStoreFactory::new("test")));
         registry.register_lock_store_plugin(Box::new(MockLockStoreFactory::new("test")));
+        assert_eq!(registry.list_lock_store_plugins().len(), 1);
     }
 
     #[test]
@@ -1814,11 +1812,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "already registered")]
-    fn test_register_duplicate_notification_plugin_panics() {
+    fn test_register_duplicate_notification_plugin_is_idempotent() {
         let mut registry = PluginRegistry::new();
-        registry.register_notification_plugin(Box::new(MockNotificationPluginFactory::new("test")));
-        registry.register_notification_plugin(Box::new(MockNotificationPluginFactory::new("test")));
+        registry.register_notification_plugin(Box::new(MockNotificationFactory::new("test")));
+        registry.register_notification_plugin(Box::new(MockNotificationFactory::new("test")));
+        assert_eq!(registry.list_notification_plugins().len(), 1);
     }
 
     #[tokio::test]

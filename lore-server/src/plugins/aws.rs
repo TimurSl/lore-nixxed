@@ -513,7 +513,7 @@ pub fn register(registry: &mut PluginRegistry) {
     registry.register_immutable_store_plugin(Box::new(AwsImmutableStorePluginFactory));
     registry.register_mutable_store_plugin(Box::new(AwsMutableStorePluginFactory));
     registry.register_lock_store_plugin(Box::new(AwsLockStorePluginFactory));
-    registry.register_resource_detector(|runtime_handle| {
+    registry.register_resource_detector("aws", |runtime_handle| {
         Box::new(AWSResourceDetector::new(runtime_handle)) as Box<dyn ResourceDetector>
     });
 }
