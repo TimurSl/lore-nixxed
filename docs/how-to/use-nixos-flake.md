@@ -1,7 +1,8 @@
 # Use Lore with NixOS flakes
 
 This repository exposes Nix packages and NixOS modules for the Lore CLI and a
-plugin-enabled Lore Server.
+plugin-enabled Lore Server. For a full list of outputs and configuration options,
+see the [Nix Flake reference](../reference/nix-flake.md).
 
 ## Install the CLI
 
