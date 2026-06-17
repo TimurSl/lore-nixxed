@@ -101,6 +101,9 @@ failure_generator = ["lore-storage/failure_generator"]
 [[bin]]
 name = "loreserver"
 
+[[bin]]
+name = "loreserver-with-plugins"
+
 [lib]
 name = "lore_server"
 
