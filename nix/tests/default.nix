@@ -98,6 +98,25 @@ let
     };
   };
 
+  authBridge = evalSystem {
+    services.lore-auth-bridge = {
+      enable = true;
+      openFirewall = true;
+      publicBaseUrl = "https://auth.lore.example";
+      authentik = {
+        issuer = "https://sso.example/application/o/lore/";
+        clientId = "lore-client";
+      };
+      jwt = {
+        issuer = "https://auth.lore.example";
+        audience = [ "lore.example" ];
+        privateKeyPemFile = "/run/secrets/lore-auth-bridge/private.pem";
+        publicJwksJson = ''{"keys":[{"kty":"RSA","kid":"rsa01","alg":"RS256","use":"sig","n":"abc","e":"AQAB"}]}'';
+      };
+      policy.defaultResourceMode = "requested";
+    };
+  };
+
   assertContains = haystack: needle:
     assert lib.assertMsg (lib.hasInfix needle haystack) "expected '${needle}' in:\n${haystack}";
     true;
@@ -105,6 +124,10 @@ let
   minimalToml = builtins.readFile minimalServer.config.environment.etc."lore-server/local.toml".source;
   pluginToml = builtins.readFile pluginServer.config.environment.etc."lore-server/local.toml".source;
   clientActivation = clientConfig.config.system.activationScripts.loreRepositories.text;
+  authBridgeExec = authBridge.config.systemd.services.lore-auth-bridge.serviceConfig.ExecStart;
+  authBridgeConfig = builtins.readFile (
+    lib.last (lib.splitString "--config " authBridgeExec)
+  );
 in
 {
   module-generated-persistent-server-toml = pkgs.runCommand "lore-server-module-generated-toml" { } ''
@@ -136,6 +159,16 @@ in
   module-managed-repository-activation = pkgs.runCommand "lore-client-module-repository-activation" { } ''
     ${lib.optionalString (assertContains clientActivation "/srv/lore/demo/.lore") ""}
     ${lib.optionalString (assertContains clientActivation "config.toml") ""}
+    touch "$out"
+  '';
+
+  module-lore-auth-bridge-generated-toml = pkgs.runCommand "lore-auth-bridge-module-generated-toml" { } ''
+    ${lib.optionalString (assertContains authBridgeConfig ''public_base_url = "https://auth.lore.example"'') ""}
+    ${lib.optionalString (assertContains authBridgeConfig ''issuer = "https://sso.example/application/o/lore/"'') ""}
+    ${lib.optionalString (assertContains authBridgeConfig ''client_id = "lore-client"'') ""}
+    ${lib.optionalString (assertContains authBridgeConfig ''private_key_pem_file = "/run/secrets/lore-auth-bridge/private.pem"'') ""}
+    ${lib.optionalString (assertContains authBridgeConfig ''default_resource_mode = "requested"'') ""}
+    ${lib.optionalString (builtins.elem 4180 authBridge.config.networking.firewall.allowedTCPPorts) ""}
     touch "$out"
   '';
 }

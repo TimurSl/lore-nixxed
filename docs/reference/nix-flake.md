@@ -6,9 +6,9 @@ The Lore project provides a first-class Nix integration via a Flake. This allows
 
 The Lore flake is compatible with `x86_64-linux` and `aarch64-linux`. It follows the standard flake output structure.
 
-- **Packages**: `lore` (CLI) and `loreserver` (Server with plugins).
-- **NixOS Modules**: `programs.lore` and `services.lore-server`.
-- **Overlays**: `default` overlay adding `lore` and `loreserver` to `pkgs`.
+- **Packages**: `lore` (CLI), `loreserver` (Server with plugins), and `lore-auth-bridge` (Authentik-backed UCS Auth bridge).
+- **NixOS Modules**: `programs.lore`, `services.lore-server`, and `services.lore-auth-bridge`.
+- **Overlays**: `default` overlay adding `lore`, `loreserver`, and `lore-auth-bridge` to `pkgs`.
 - **Checks**: Integration tests for both CLI and Server.
 
 ## Flake Outputs
@@ -17,17 +17,19 @@ The Lore flake is compatible with `x86_64-linux` and `aarch64-linux`. It follows
 
 - **`lore`**: The Lore CLI package. Includes shell completions for Bash and Zsh.
 - **`loreserver`**: The Lore Server package. This version is built with plugin support (AWS, Consul, etc.).
+- **`lore-auth-bridge`**: UCS Auth-compatible gRPC bridge that delegates user login to Authentik and signs Lore JWTs.
 - **`default`**: Points to `lore`.
 
 ### NixOS Modules (`nixosModules`)
 
 - **`lore`**: Configures the Lore CLI and manages repository-level configurations.
 - **`lore-server`**: Configures and runs the `loreserver` as a systemd service.
-- **`default`**: Imports both `lore` and `lore-server` modules.
+- **`lore-auth-bridge`**: Configures and runs the Authentik UCS Auth bridge as a systemd service.
+- **`default`**: Imports `lore`, `lore-server`, and `lore-auth-bridge` modules.
 
 ### Overlays (`overlays`)
 
-- **`default`**: Adds `lore` and `loreserver` to your `nixpkgs` set.
+- **`default`**: Adds `lore`, `loreserver`, and `lore-auth-bridge` to your `nixpkgs` set.
 
 ## NixOS Module: `programs.lore`
 
@@ -58,6 +60,24 @@ This module runs the Lore Server as a hardened systemd service.
 - **`services.lore-server.environmentFile`**: (path) Path to a file containing environment variables (e.g., secrets).
 - **`services.lore-server.openFirewall`**: (bool) Automatically open ports in the NixOS firewall based on `settings`.
 
+## NixOS Module: `services.lore-auth-bridge`
+
+This module runs the Authentik-backed UCS Auth bridge as a hardened systemd service.
+
+### Key Options
+
+- **`services.lore-auth-bridge.enable`**: (bool) Whether to enable the bridge.
+- **`services.lore-auth-bridge.package`**: (package) The bridge package to use (defaults to `pkgs.lore-auth-bridge`).
+- **`services.lore-auth-bridge.publicBaseUrl`**: Public HTTPS URL for callbacks and JWKS, for example `https://auth.lore.example`.
+- **`services.lore-auth-bridge.authentik.issuer`**: Authentik OAuth/OIDC issuer URL.
+- **`services.lore-auth-bridge.authentik.clientId`**: Authentik OAuth client ID.
+- **`services.lore-auth-bridge.authentik.flow`**: `device`, `callback`, or `both`; defaults to `device`.
+- **`services.lore-auth-bridge.jwt.issuer`**: JWT issuer claim for bridge-issued Lore tokens.
+- **`services.lore-auth-bridge.jwt.audience`**: JWT audiences/root domains accepted by Lore clients and `loreserver`.
+- **`services.lore-auth-bridge.jwt.privateKeyPemFile`**: Runtime path to the RS256 private key PEM.
+- **`services.lore-auth-bridge.jwt.publicJwksJson`** or **`publicJwksJsonFile`**: Public JWKS served by the bridge.
+- **`services.lore-auth-bridge.policy.defaultResourceMode`**: `wildcard` grants `urc-*`; `requested` grants only requested resource IDs.
+
 ## Usage Examples
 
 ### Using the Overlay in a Flake
@@ -77,7 +97,28 @@ This module runs the Lore Server as a hardened systemd service.
           programs.lore.enable = true;
           services.lore-server = {
             enable = true;
+            settings.environment.endpoint.auth_url = "ucs-auth://auth.lore.example";
             settings.server.http.port = 8080;
+            settings.server.auth = {
+              jwt_issuer = "https://auth.lore.example";
+              jwt_audience = [ "lore.example" ];
+              jwk.endpoint = "https://auth.lore.example/.well-known/jwks.json";
+            };
+          };
+
+          services.lore-auth-bridge = {
+            enable = true;
+            publicBaseUrl = "https://auth.lore.example";
+            authentik = {
+              issuer = "https://sso.example/application/o/lore/";
+              clientId = "lore-client";
+            };
+            jwt = {
+              issuer = "https://auth.lore.example";
+              audience = [ "lore.example" ];
+              privateKeyPemFile = "/run/secrets/lore-auth-bridge/private.pem";
+              publicJwksJsonFile = "/run/secrets/lore-auth-bridge/jwks.json";
+            };
           };
         }
       ];

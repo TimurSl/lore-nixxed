@@ -19,4 +19,14 @@ in
     cargoBuildFlags = [ "--bin=loreserver" ];
     cargoTestFlags = [ "--bin=loreserver" ];
   });
+
+  lore-auth-bridge = common.overrideAttrs (_old: {
+    pname = "lore-auth-bridge";
+    cargoBuildFlags = [ "--bin=lore-auth-bridge" ];
+    cargoTestFlags = [ "--package=lore-auth-bridge" ];
+    meta = common.meta // {
+      description = "Authentik-backed UCS Auth bridge for Lore";
+      mainProgram = "lore-auth-bridge";
+    };
+  });
 }

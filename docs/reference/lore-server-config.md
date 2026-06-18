@@ -198,6 +198,21 @@ jwt_audience = ["lore-service"]
 endpoint = "https://accounts.example.com/.well-known/jwks.json"
 ```
 
+For an Authentik-backed Lore Auth bridge deployment, advertise the bridge to
+clients and configure the server to verify bridge-issued JWTs:
+
+```toml
+[environment.endpoint]
+auth_url = "ucs-auth://auth.lore.zenisoft.net.ua"
+
+[server.auth]
+jwt_issuer = "https://auth.lore.zenisoft.net.ua"
+jwt_audience = ["lore.zenisoft.net.ua"]
+
+[server.auth.jwk]
+endpoint = "https://auth.lore.zenisoft.net.ua/.well-known/jwks.json"
+```
+
 ## Store settings
 
 Lore Server keeps three stores: an immutable store for content-addressed fragments, a mutable store for branch pointers, and a lock store for distributed locking. Each is configured by a top-level table — `[immutable_store]`, `[mutable_store]`, `[lock_store]` — whose `mode` field selects the backend.

@@ -19,6 +19,7 @@ members = [
     "lore-storage",
     "lore-telemetry",
     "lore-transport",
+    "lore-auth-bridge",
 ]
 
 [workspace.package]
@@ -123,6 +124,7 @@ serde_json = { version = "1.0.143", default-features = false }
 serde_with = { version = "3.14.0", default-features = false, features = ["alloc", "macros"] }
 serial_test = { version = "3.2.0" }
 socket2 = "0.6.0"
+tempfile = "3.23.0"
 syn = "2.0.106"
 sysinfo = "0.37.0"
 temp-env = "0.3.6"

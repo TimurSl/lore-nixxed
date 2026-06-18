@@ -2468,6 +2468,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "lore-auth-bridge"
+version = "0.8.4-nightly"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "clap",
+ "config",
+ "jsonwebtoken",
+ "prost",
+ "reqwest",
+ "ring",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "lore-aws"
 version = "0.8.4-nightly"
 dependencies = [
@@ -5225,6 +5255,7 @@ checksum = "ddd74a9687298c6858e9b88ec8935ec45d22e8fd5e6394fa1bd4e99a87789c76"
 dependencies = [
  "getrandom 0.4.2",
  "js-sys",
+ "serde_core",
  "wasm-bindgen",
  "zerocopy",
 ]

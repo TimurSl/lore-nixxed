@@ -1,8 +1,10 @@
 # Use Lore with NixOS flakes
 
 This repository exposes Nix packages and NixOS modules for the Lore CLI and a
-plugin-enabled Lore Server. For a full list of outputs and configuration options,
-see the [Nix Flake reference](../reference/nix-flake.md).
+plugin-enabled Lore Server. It also exposes an Authentik-backed UCS Auth bridge
+for deployments that want `lore auth login` against an external identity
+provider. For a full list of outputs and configuration options, see the
+[Nix Flake reference](../reference/nix-flake.md).
 
 ## Install the CLI
 
@@ -41,6 +43,51 @@ The module installs `lore`, shell completions, and `/etc/xdg/lore/cli.toml`.
 
 The server stores durable local state under `/var/lib/lore/store` and reads its
 generated overlay from `/etc/lore-server/local.toml`.
+
+## Add Authentik login through the UCS Auth bridge
+
+```nix
+{
+  imports = [
+    inputs.lore.nixosModules.lore-server
+    inputs.lore.nixosModules.lore-auth-bridge
+  ];
+  nixpkgs.overlays = [ inputs.lore.overlays.default ];
+
+  services.lore-server = {
+    enable = true;
+    settings = {
+      environment.endpoint.auth_url = "ucs-auth://auth.lore.zenisoft.net.ua";
+
+      server.auth = {
+        jwt_issuer = "https://auth.lore.zenisoft.net.ua";
+        jwt_audience = [ "lore.zenisoft.net.ua" ];
+        jwk.endpoint = "https://auth.lore.zenisoft.net.ua/.well-known/jwks.json";
+      };
+    };
+  };
+
+  services.lore-auth-bridge = {
+    enable = true;
+    publicBaseUrl = "https://auth.lore.zenisoft.net.ua";
+    authentik = {
+      issuer = "https://sso.example/application/o/lore/";
+      clientId = "lore-client";
+      flow = "device";
+    };
+    jwt = {
+      issuer = "https://auth.lore.zenisoft.net.ua";
+      audience = [ "lore.zenisoft.net.ua" ];
+      privateKeyPemFile = "/run/secrets/lore-auth-bridge/private.pem";
+      publicJwksJsonFile = "/run/secrets/lore-auth-bridge/jwks.json";
+    };
+  };
+}
+```
+
+The bridge signs Lore AuthN/AuthZ JWTs and serves the matching JWKS. Authentik
+must have device-code flow enabled for the configured provider when
+`authentik.flow = "device"`.
 
 ## Enable AWS storage and Consul topology
 
